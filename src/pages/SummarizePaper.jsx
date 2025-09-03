@@ -2,15 +2,15 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useApp } from '../contexts/AppContext'
 import { summarizePaper, extractPaperContent } from '../services/openai'
-import { Sparkles, Link as LinkIcon, FileText, AlertCircle } from 'lucide-react'
+import { Sparkles, Link as LinkIcon, FileText, AlertCircle, Copy, ExternalLink, Save } from 'lucide-react'
+import ZoteroConnect from '../components/ZoteroConnect'
 import toast from 'react-hot-toast'
 
 const SummarizePaper = () => {
   const [paperUrl, setPaperUrl] = useState('')
-  const [loading, setLoading] = useState(false)
   const [currentSummary, setCurrentSummary] = useState(null)
   const { user, updateUser } = useAuth()
-  const { addSummary } = useApp()
+  const { addSummary, loading, setLoading } = useApp()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -37,23 +37,37 @@ const SummarizePaper = () => {
       toast.loading('Generating summary...', { id: 'summarize' })
       const result = await summarizePaper(paperContent, paperUrl)
       
-      // Add to app state
+      // Format the summary for display
       const summaryWithId = {
-        id: Date.now(),
         ...result,
         summaryText: result.summary
       }
       
-      addSummary(summaryWithId)
       setCurrentSummary(summaryWithId)
       
       // Update user's usage count
-      updateUser({ summariesUsed: user.summariesUsed + 1 })
+      await updateUser({ summariesUsed: user.summariesUsed + 1 })
       
       toast.success('Summary generated successfully!', { id: 'summarize' })
+    } catch (error) {
+      console.error('Error generating summary:', error)
+      toast.error(error.message || 'Failed to generate summary. Please try again.', { id: 'summarize' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSaveSummary = async () => {
+    if (!currentSummary) return
+    
+    try {
+      setLoading(true)
+      await addSummary(currentSummary)
+      toast.success('Summary saved to your library')
       setPaperUrl('')
     } catch (error) {
-      toast.error(error.message, { id: 'summarize' })
+      console.error('Error saving summary:', error)
+      toast.error('Failed to save summary. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -159,9 +173,20 @@ const SummarizePaper = () => {
       {/* Current Summary */}
       {currentSummary && (
         <div className="card animate-slide-in">
-          <div className="flex items-center mb-4">
-            <FileText className="w-5 h-5 text-primary mr-2" />
-            <h3 className="text-lg font-medium text-gray-900">Generated Summary</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center">
+              <FileText className="w-5 h-5 text-primary mr-2" />
+              <h3 className="text-lg font-medium text-gray-900">Generated Summary</h3>
+            </div>
+            <button
+              onClick={handleSaveSummary}
+              disabled={loading}
+              className="flex items-center text-primary hover:text-primary/80 transition-colors"
+              title="Save to library"
+            >
+              <Save className="w-5 h-5 mr-1" />
+              <span className="text-sm font-medium">Save to Library</span>
+            </button>
           </div>
           
           <div className="mb-4">
@@ -169,9 +194,10 @@ const SummarizePaper = () => {
               href={currentSummary.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary hover:underline font-medium"
+              className="flex items-center text-primary hover:underline font-medium"
             >
-              View Original Paper →
+              <span>View Original Paper</span>
+              <ExternalLink className="w-4 h-4 ml-1" />
             </a>
           </div>
 
@@ -187,18 +213,25 @@ const SummarizePaper = () => {
                 navigator.clipboard.writeText(currentSummary.summaryText)
                 toast.success('Summary copied to clipboard!')
               }}
-              className="btn-secondary"
+              className="btn-secondary flex items-center"
             >
+              <Copy className="w-4 h-4 mr-2" />
               Copy Summary
             </button>
             <a
               href={currentSummary.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-secondary"
+              className="btn-secondary flex items-center"
             >
+              <ExternalLink className="w-4 h-4 mr-2" />
               View Paper
             </a>
+          </div>
+          
+          {/* Zotero Integration */}
+          <div className="mt-4">
+            <ZoteroConnect summary={currentSummary} />
           </div>
         </div>
       )}

@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { extractPaperContent as extractContent } from './paperExtraction'
 
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY || 'sk-test-key', // Replace with your OpenAI API key
@@ -48,27 +49,12 @@ Please format the response in clear sections and keep it concise but comprehensi
   }
 }
 
-// Mock function to extract paper content from URL/DOI
+// Function to extract paper content from URL/DOI
 export const extractPaperContent = async (url) => {
-  // In a real implementation, this would:
-  // 1. Fetch the paper from the URL
-  // 2. Extract text content (PDF parsing, HTML scraping, etc.)
-  // 3. Return the extracted text
-  
-  // For demo purposes, return mock content
-  await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API delay
-  
-  return `
-    Title: Advanced Machine Learning Techniques for Natural Language Processing
-
-    Abstract: This paper presents novel approaches to natural language processing using transformer architectures. We demonstrate significant improvements in text classification and sentiment analysis tasks through the application of attention mechanisms and transfer learning.
-
-    Introduction: Natural language processing (NLP) has seen remarkable advances with the introduction of transformer models. This work builds upon previous research to develop more efficient and accurate text processing methods.
-
-    Methodology: We employed a multi-layer transformer architecture with self-attention mechanisms. The model was trained on a large corpus of text data using transfer learning techniques.
-
-    Results: Our approach achieved state-of-the-art performance on several benchmark datasets, showing 15% improvement in accuracy compared to previous methods.
-
-    Conclusion: The proposed methodology demonstrates the effectiveness of advanced transformer architectures in NLP tasks, with potential applications in various domains.
-  `
+  try {
+    return await extractContent(url)
+  } catch (error) {
+    console.error('Error in paper extraction:', error)
+    throw new Error(`Failed to extract paper content: ${error.message}`)
+  }
 }
