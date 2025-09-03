@@ -1,11 +1,14 @@
 import { useAuth } from '../contexts/AuthContext'
-import { User, Crown, Zap, Check } from 'lucide-react'
+import { User, Crown, Zap, Check, CreditCard, Key, Shield, Loader, Receipt } from 'lucide-react'
 import { useState } from 'react'
+import SubscriptionForm from '../components/SubscriptionForm'
+import BillingHistory from '../components/BillingHistory'
 import toast from 'react-hot-toast'
 
 const Settings = () => {
-  const { user, updateUser, logout } = useAuth()
+  const { user, updateUser, upgradeSubscription, logout, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(false)
+  const [showApiKey, setShowApiKey] = useState(false)
 
   const subscriptionPlans = [
     {
@@ -40,21 +43,7 @@ const Settings = () => {
   const handleUpgrade = async (planName) => {
     setLoading(true)
     try {
-      // Mock upgrade process
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const newLimits = {
-        free: 5,
-        basic: 50,
-        premium: 999
-      }
-      
-      updateUser({
-        subscriptionTier: planName.toLowerCase(),
-        summariesLimit: newLimits[planName.toLowerCase()],
-        summariesUsed: Math.min(user.summariesUsed, newLimits[planName.toLowerCase()])
-      })
-      
+      await upgradeSubscription(planName.toLowerCase())
       toast.success(`Successfully upgraded to ${planName} plan!`)
     } catch (error) {
       toast.error('Failed to upgrade plan. Please try again.')
@@ -62,6 +51,29 @@ const Settings = () => {
       setLoading(false)
     }
   }
+
+  const regenerateApiKey = async () => {
+    if (!window.confirm('Are you sure you want to regenerate your API key? This will invalidate your current key.')) {
+      return
+    }
+    
+    setLoading(true)
+    try {
+      const newApiKey = 'sk-' + Array.from(crypto.getRandomValues(new Uint8Array(24)))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+      
+      await updateUser({ apiKey: newApiKey })
+      toast.success('API key regenerated successfully')
+      setShowApiKey(true)
+    } catch (error) {
+      toast.error('Failed to regenerate API key. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const isLoading = loading || authLoading
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -108,12 +120,60 @@ const Settings = () => {
           </div>
         </div>
 
+        {/* API Key (for Basic and Premium plans) */}
+        {user?.subscriptionTier !== 'free' && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="flex items-center mb-4">
+              <Key className="w-5 h-5 text-primary mr-2" />
+              <h4 className="text-md font-medium text-gray-900">API Key</h4>
+            </div>
+            
+            <div className="flex items-start space-x-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={user?.apiKey || ''}
+                    readOnly
+                    className="input-field pr-24 font-mono text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-primary hover:underline"
+                  >
+                    {showApiKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Use this key to access the ScholarSift API. Keep it secret!
+                </p>
+              </div>
+              <button
+                onClick={regenerateApiKey}
+                disabled={isLoading}
+                className="btn-secondary text-sm h-10"
+              >
+                Regenerate
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="mt-6 pt-6 border-t border-gray-200">
           <button
             onClick={logout}
+            disabled={isLoading}
             className="btn-secondary"
           >
-            Sign Out
+            {isLoading ? (
+              <div className="flex items-center">
+                <Loader className="w-4 h-4 mr-2 animate-spin" />
+                Please wait...
+              </div>
+            ) : (
+              'Sign Out'
+            )}
           </button>
         </div>
       </div>
@@ -178,21 +238,33 @@ const Settings = () => {
                 ))}
               </ul>
 
-              <button
-                onClick={() => handleUpgrade(plan.name)}
-                disabled={plan.current || loading}
-                className={`w-full py-2 px-4 rounded-md font-medium transition-colors ${
-                  plan.current
-                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
-                    : plan.recommended
-                    ? 'bg-accent text-white hover:opacity-90'
-                    : 'bg-primary text-white hover:opacity-90'
-                }`}
-              >
-                {plan.current ? 'Current Plan' : `Upgrade to ${plan.name}`}
-              </button>
+              {plan.current ? (
+                <button
+                  disabled
+                  className="w-full py-2 px-4 rounded-md font-medium bg-gray-100 text-gray-500 cursor-not-allowed"
+                >
+                  Current Plan
+                </button>
+              ) : (
+                <SubscriptionForm 
+                  plan={plan.name} 
+                  onSuccess={(tier) => handleUpgrade(tier)}
+                />
+              )}
             </div>
           ))}
+        </div>
+
+        <div className="mt-6 p-4 bg-gray-50 rounded-lg flex items-start">
+          <Shield className="w-5 h-5 text-primary mr-2 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-gray-700">
+              Your payment information is securely processed by Stripe. ScholarSift does not store your credit card details.
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              You can cancel your subscription at any time from this page.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -234,6 +306,18 @@ const Settings = () => {
           </div>
         </div>
       </div>
+      
+      {/* Billing History */}
+      {user?.subscriptionTier !== 'free' && (
+        <div className="card">
+          <div className="flex items-center mb-6">
+            <Receipt className="w-5 h-5 text-primary mr-2" />
+            <h3 className="text-lg font-medium text-gray-900">Billing History</h3>
+          </div>
+          
+          <BillingHistory />
+        </div>
+      )}
     </div>
   )
 }
